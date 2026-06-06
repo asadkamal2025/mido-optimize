@@ -1,0 +1,5 @@
+mido-optimize/
+├── scripts/
+│   └── mido_optimize.sh
+├── README.md
+└── LICENSE
