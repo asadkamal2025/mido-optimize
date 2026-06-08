@@ -55,21 +55,6 @@ reboot
 
 ---
 
-## 📁 Module Structure
-
-```
-mido_optimize/
-├── module.prop              # Module metadata
-├── post-fs-data.sh         # Boot script (runs first)
-├── system.prop             # Persistent properties
-├── install.sh              # Installation script
-├── MAGISK_INSTALL.md       # This file
-└── scripts/
-    └── mido_optimize.sh    # Main optimization script
-```
-
----
-
 ## ✅ Verify Installation
 
 After installing the module:
