@@ -2,24 +2,26 @@
 
 All notable changes to mido-optimize will be documented in this file.
 
-## [1.2] - 2026-06-08
+## [1.2] - 2026-06-20
 
 ### Added
 - Comprehensive error handling and validation
-- Root user check at startup
-- Better logging with timestamps
-- Success indicators (✓) in logs
+- Root user check at startup (exits cleanly if not root)
+- Better logging with timestamps and ✓ success indicators
 - Detailed comments for each optimization section
-- Better documentation in code
+- `update.json` for Magisk auto-update support
+- Explicit variable expansion instead of `$_` for shell portability
 
 ### Improved
-- Script structure and readability
+- Script structure and readability across both `mido_optimize.sh` and `scripts/mido_optimize.sh`
 - Error messages and debugging info
 - Log formatting and clarity
+- `module.prop` now includes `updateJson` field
 - Overall code quality
 
 ### Fixed
-- N/A (Initial v1.2 release)
+- `scripts/mido_optimize.sh` was empty — now contains full script
+- Replaced `$_` shorthand with explicit paths for POSIX sh compatibility
 
 ## [1.1] - 2026-06-06
 
@@ -36,12 +38,6 @@ All notable changes to mido-optimize will be documented in this file.
 ## [Planned]
 
 ### v1.3
-- [ ] Magisk module packaging
-- [ ] Boot script integration
-- [ ] Persistent settings across reboots
-- [ ] Uninstall script
-
-### v1.4
 - [ ] Android 12+ support testing
 - [ ] Additional ROM compatibility (HavocOS, AOSP variants)
 - [ ] User configuration file (.config)
