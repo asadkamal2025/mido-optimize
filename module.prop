@@ -1,7 +1,7 @@
 id=mido_optimize
-name=mido optimize - DeGoogle + Performance
-version=v1.2
-versionCode=12
+name=mido optimize - GApps Performance
+version=v3.0
+versionCode=30
 author=asadkamal2025
-description=Extreme DeGoogle + Balanced Performance Script for Redmi Note 4 (SD625). Includes memory optimization, CPU tuning, GPU optimization, and logging reduction.
+description=GApps-Optimized Performance Script for Redmi Note 4 (SD625). Full Google GApps support with tuned GMS wake-locks, PSI-based LMKd priority, relaxed sync interval, CPU/GPU tuning, and tmpfs cache. No DeGoogle - built for smooth GApps daily driver use.
 updateJson=https://raw.githubusercontent.com/asadkamal2025/mido-optimize/main/update.json
