@@ -48,3 +48,12 @@ All notable changes to mido-optimize will be documented in this file.
 - [ ] Real-time performance monitoring
 - [ ] Before/after benchmarking
 - [ ] Custom profile selection
+
+## v3.0 - GApps Performance Build
+- Removed DeGoogle package disables (GMS/GSF/Play Store no longer touched)
+- Added targeted disable for only non-essential background components (Play Games, Wellbeing, Feedback, Print recommendation)
+- Added GMS doze-whitelist enforcement so push notifications survive
+- PSI-based LMKd tuning biased to protect GMS from repeated restart-kills (kill_timeout raised to 2500ms)
+- Relaxed periodic sync interval to 30min (push via FCM unaffected)
+- Retained CPU interactive governor tuning, Adreno 506 GPU tuning
+- Retained tmpfs /cache mount for fast GApps DB writes (648 MB/s verified)
