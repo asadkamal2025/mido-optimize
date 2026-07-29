@@ -77,6 +77,9 @@ check_node() {
 ```
 
 ### Rules
+- Reuse the helpers in `scripts/lib/common.sh` (`log`, `write_node`,
+  `set_prop`, `mount_tmpfs`, ...) instead of re-implementing them; add new
+  shared helpers there rather than copying code between scripts
 - Use 4 spaces for indentation (not tabs)
 - Use lowercase for function names
 - Use UPPERCASE for constants

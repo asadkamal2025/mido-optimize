@@ -48,9 +48,28 @@ cp -r /path/to/scripts .
 # Fix permissions
 chmod 0755 post-fs-data.sh
 chmod 0755 scripts/mido_optimize.sh
+chmod 0644 scripts/lib/common.sh
 
 # Restart device
 reboot
+```
+
+---
+
+## 🧩 Shared Helper Library
+
+Both shell scripts source `scripts/lib/common.sh` (logging, sysfs writes,
+prop setting, tmpfs handling). Whenever a script is copied somewhere else,
+`lib/common.sh` must be copied next to it or it will refuse to start:
+
+```bash
+# Example: chrome_colab_guard_v7.sh as a service.d script
+su
+mkdir -p /data/adb/service.d/lib
+cp scripts/chrome_colab_guard_v7.sh /data/adb/service.d/
+cp scripts/lib/common.sh /data/adb/service.d/lib/
+chmod 0755 /data/adb/service.d/chrome_colab_guard_v7.sh
+chmod 0644 /data/adb/service.d/lib/common.sh
 ```
 
 ---

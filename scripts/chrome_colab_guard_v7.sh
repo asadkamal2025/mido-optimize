@@ -90,8 +90,10 @@
 #
 # Install path:
 #   /data/adb/service.d/chrome_colab_guard_v7.sh
+#   /data/adb/service.d/lib/common.sh   (shared helpers, sourced below)
 # Permissions:
 #   chmod 0755 /data/adb/service.d/chrome_colab_guard_v7.sh
+#   chmod 0644 /data/adb/service.d/lib/common.sh
 
 # -----------------------------
 # Config
@@ -110,6 +112,7 @@ ACTIVE_SLEEP=8
 TMPFS_ENABLED="1"
 TMPFS_TARGET="/data/local/tmp"
 TMPFS_SIZE="64M"
+TMPFS_MOUNT_OPTS="mode=1777,nosuid,nodev"
 # 4GB device with full GApps: be conservative. Require more headroom to
 # mount, and keep re-checking so we can back out if things get tight later.
 TMPFS_MIN_MEM_KB=524288      # 512MB free required to MOUNT
@@ -134,16 +137,27 @@ PATH=/system/bin:/system/xbin:/sbin:/vendor/bin:$PATH
 
 mkdir -p "$LOG_DIR" "$STATE_DIR" 2>/dev/null
 
-# Cached per-tick timestamp - refreshed once per loop iteration by
-# refresh_tick_ts(). log() reuses it instead of forking `date` every line.
-LOOP_TS=""
+# Shared helpers (logging, proc reads, tmpfs handling) live in lib/common.sh
+# next to this script. MIDO_LOG_CACHE_TS=1 keeps the v7 property of forking
+# `date` once per loop tick instead of once per log line: refresh_tick_ts()
+# refreshes the cached timestamp at the top of every tick.
+SCRIPT_DIR="${0%/*}"
+[ "$SCRIPT_DIR" = "$0" ] && SCRIPT_DIR="."
+
+MIDO_LOG_FILE="$LOG_FILE"
+MIDO_LOG_TS_FMT="+%F %T "
+MIDO_LOG_CACHE_TS=1
+
+# shellcheck source=scripts/lib/common.sh
+if [ -r "$SCRIPT_DIR/lib/common.sh" ]; then
+    . "$SCRIPT_DIR/lib/common.sh"
+else
+    echo "ERROR: cannot find lib/common.sh next to $0" >&2
+    exit 1
+fi
 
 refresh_tick_ts() {
-    LOOP_TS="$(date '+%F %T')"
-}
-
-log() {
-    echo "$LOOP_TS  $*" >> "$LOG_FILE"
+    refresh_log_ts
 }
 
 prop_get() {
@@ -201,44 +215,30 @@ wait_for_boot() {
     return 0
 }
 
-get_mem_available_kb() {
-    awk '/MemAvailable:/ {print $2; exit}' /proc/meminfo 2>/dev/null
-}
-
-is_tmpfs_mounted() {
-    awk -v target="$TMPFS_TARGET" '$2 == target && $3 == "tmpfs" {found=1} END{exit(found?0:1)}' /proc/mounts
-}
-
 mount_tmpfs_if_needed() {
     [ "$TMPFS_ENABLED" = "1" ] || {
         log "[SKIP] tmpfs disabled by config"
         return 0
     }
 
-    if is_tmpfs_mounted; then
+    if is_tmpfs_mounted "$TMPFS_TARGET"; then
         log "[SKIP] $TMPFS_TARGET already tmpfs"
         return 0
     fi
 
     avail_kb="$(get_mem_available_kb)"
-    case "$avail_kb" in
-        ''|*[!0-9]*)
-            log "[WARN] MemAvailable unreadable; skip tmpfs mount"
-            return 0
-            ;;
-    esac
+    if ! is_positive_int "$avail_kb"; then
+        log "[WARN] MemAvailable unreadable; skip tmpfs mount"
+        return 0
+    fi
 
     if [ "$avail_kb" -lt "$TMPFS_MIN_MEM_KB" ]; then
         log "[SKIP] MemAvailable=${avail_kb}KB < ${TMPFS_MIN_MEM_KB}KB; tmpfs not mounted"
         return 0
     fi
 
-    mkdir -p "$TMPFS_TARGET" 2>/dev/null
-    if mount -t tmpfs -o "size=$TMPFS_SIZE,mode=1777,nosuid,nodev" tmpfs "$TMPFS_TARGET" 2>/dev/null; then
-        log "[OK] mounted tmpfs on $TMPFS_TARGET size=$TMPFS_SIZE (avail=${avail_kb}KB)"
-    else
-        log "[FAIL] tmpfs mount failed on $TMPFS_TARGET"
-    fi
+    mount_tmpfs "$TMPFS_TARGET" "$TMPFS_SIZE" "$TMPFS_MOUNT_OPTS" \
+        && log "[OK] avail=${avail_kb}KB at mount time"
 }
 
 # v7: tmpfs is no longer "mount once, trust forever". A 4GB device running
@@ -246,12 +246,10 @@ mount_tmpfs_if_needed() {
 # keep re-validating and back out if memory gets critically low.
 recheck_tmpfs_safety() {
     [ "$TMPFS_ENABLED" = "1" ] || return 0
-    is_tmpfs_mounted || return 0
+    is_tmpfs_mounted "$TMPFS_TARGET" || return 0
 
     avail_kb="$(get_mem_available_kb)"
-    case "$avail_kb" in
-        ''|*[!0-9]*) return 0 ;;
-    esac
+    is_positive_int "$avail_kb" || return 0
 
     if [ "$avail_kb" -lt "$TMPFS_CRITICAL_MEM_KB" ]; then
         log "[WARN] MemAvailable=${avail_kb}KB critical; unmounting tmpfs on $TMPFS_TARGET"
@@ -309,14 +307,6 @@ collect_chrome_pids() {
                 ;;
         esac
     done
-}
-
-# v7: no `cat` fork - shell builtin `read` reads the file directly.
-read_proc_value() {
-    file="$1"
-    [ -r "$file" ] || return 1
-    IFS= read -r _val < "$file" 2>/dev/null || return 1
-    echo "$_val"
 }
 
 # v7: no `awk` fork and no fragile "$19 by raw whitespace" assumption.

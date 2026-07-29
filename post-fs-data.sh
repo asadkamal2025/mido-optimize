@@ -6,10 +6,18 @@
 MODDIR=${0%/*}
 LOGFILE="/data/local/tmp/mido_optimize_magisk.log"
 
-# Lightweight Android version detection (baseline: Android 11 / API 30)
-ANDROID_SDK="$(getprop ro.build.version.sdk 2>/dev/null)"
-ANDROID_RELEASE="$(getprop ro.build.version.release 2>/dev/null)"
-echo "[post-fs-data] Detected Android $ANDROID_RELEASE (API $ANDROID_SDK)" >> "$LOGFILE"
+MIDO_LOG_FILE="$LOGFILE"
+MIDO_LOG_TS_FMT="+[%H:%M:%S]"
+
+# shellcheck source=scripts/lib/common.sh
+if [ -r "$MODDIR/scripts/lib/common.sh" ]; then
+    . "$MODDIR/scripts/lib/common.sh"
+    # Lightweight Android version detection (baseline: Android 11 / API 30)
+    log_android_version 30 "[post-fs-data]"
+else
+    echo "[post-fs-data] ERROR: missing $MODDIR/scripts/lib/common.sh" >> "$LOGFILE"
+    exit 1
+fi
 
 # Execute optimization script
 exec "$MODDIR/scripts/mido_optimize.sh" >> $LOGFILE 2>&1
