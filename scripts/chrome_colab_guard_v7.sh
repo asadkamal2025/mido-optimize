@@ -96,20 +96,26 @@
 # -----------------------------
 # Config
 # -----------------------------
-CHROME_PKG="com.android.chrome"
-LOG_DIR="/data/adb/chrome-colab-guard"
+CHROME_PKG="${CHROME_PKG:-com.android.chrome}"
+LOG_DIR="${LOG_DIR:-/data/adb/chrome-colab-guard}"
 LOG_FILE="$LOG_DIR/chrome_colab_guard_v7.log"
 STATE_DIR="$LOG_DIR/state"
 LOCK_DIR="$LOG_DIR/lock"
 PERSIST_PROP="persist.chrome.guard.enabled"
+
+# Filesystem roots, overridable so the logic can be exercised against
+# fixtures instead of the live kernel interfaces.
+PROC_DIR="${PROC_DIR:-/proc}"
+MEMINFO_FILE="${MEMINFO_FILE:-$PROC_DIR/meminfo}"
+MOUNTS_FILE="${MOUNTS_FILE:-$PROC_DIR/mounts}"
 DEFAULT_ENABLED="1"
 BOOT_WAIT_SECS=180
 IDLE_SLEEP=20
 ACTIVE_SLEEP=8
 
-TMPFS_ENABLED="1"
-TMPFS_TARGET="/data/local/tmp"
-TMPFS_SIZE="64M"
+TMPFS_ENABLED="${TMPFS_ENABLED:-1}"
+TMPFS_TARGET="${TMPFS_TARGET:-/data/local/tmp}"
+TMPFS_SIZE="${TMPFS_SIZE:-64M}"
 # 4GB device with full GApps: be conservative. Require more headroom to
 # mount, and keep re-checking so we can back out if things get tight later.
 TMPFS_MIN_MEM_KB=524288      # 512MB free required to MOUNT
@@ -202,11 +208,11 @@ wait_for_boot() {
 }
 
 get_mem_available_kb() {
-    awk '/MemAvailable:/ {print $2; exit}' /proc/meminfo 2>/dev/null
+    awk '/MemAvailable:/ {print $2; exit}' "$MEMINFO_FILE" 2>/dev/null
 }
 
 is_tmpfs_mounted() {
-    awk -v target="$TMPFS_TARGET" '$2 == target && $3 == "tmpfs" {found=1} END{exit(found?0:1)}' /proc/mounts
+    awk -v target="$TMPFS_TARGET" '$2 == target && $3 == "tmpfs" {found=1} END{exit(found?0:1)}' "$MOUNTS_FILE"
 }
 
 mount_tmpfs_if_needed() {
@@ -287,15 +293,17 @@ collect_chrome_pids() {
     MAIN_PIDS=""
     CHILD_PIDS=""
 
-    matches="$(grep -laF "$CHROME_PKG" /proc/[0-9]*/cmdline 2>/dev/null)"
+    matches="$(grep -laF "$CHROME_PKG" "$PROC_DIR"/[0-9]*/cmdline 2>/dev/null || :)"
     [ -n "$matches" ] || return 0
 
     for f in $matches; do
-        pid="${f#/proc/}"
+        pid="${f#"$PROC_DIR"/}"
         pid="${pid%/cmdline}"
         # Re-read just this one match to classify exactly (builtin `read`,
         # no extra process forked).
-        IFS= read -r cmd < "$f" 2>/dev/null
+        # cmdline has no trailing newline, so `read` reports failure even
+        # though $cmd holds the value; ignore its status.
+        IFS= read -r cmd < "$f" 2>/dev/null || :
         case "$cmd" in
             "$CHROME_PKG")
                 MAIN_PIDS="$MAIN_PIDS $pid"
@@ -326,7 +334,7 @@ read_proc_value() {
 # is relative field 17 (state=1 ... nice=17 of the remainder).
 read_proc_nice() {
     pid="$1"
-    stat_line="$(read_proc_value "/proc/$pid/stat")" || return 1
+    stat_line="$(read_proc_value "$PROC_DIR/$pid/stat")" || return 1
     rest="${stat_line##*) }"
     set -- $rest
     [ "$#" -ge 17 ] || return 1
@@ -337,13 +345,13 @@ apply_pid_tuning() {
     pid="$1"
     oom_score="$2"
     nice_level="$3"
-    [ -d "/proc/$pid" ] || return 1
+    [ -d "$PROC_DIR/$pid" ] || return 1
 
     changed=0
 
-    current_oom="$(read_proc_value "/proc/$pid/oom_score_adj")"
+    current_oom="$(read_proc_value "$PROC_DIR/$pid/oom_score_adj")"
     if [ "$current_oom" != "$oom_score" ]; then
-        if echo "$oom_score" > "/proc/$pid/oom_score_adj" 2>/dev/null; then
+        if echo "$oom_score" > "$PROC_DIR/$pid/oom_score_adj" 2>/dev/null; then
             changed=1
             log "[OK] pid=$pid oom_score_adj -> $oom_score"
         else
@@ -384,7 +392,7 @@ tune_if_needed() {
         return 0
     fi
 
-    current_oom="$(read_proc_value "/proc/$pid/oom_score_adj")"
+    current_oom="$(read_proc_value "$PROC_DIR/$pid/oom_score_adj")"
     current_nice="$(read_proc_nice "$pid")"
     if [ "$current_oom" != "$oom_score" ] || [ "$current_nice" != "$nice_level" ]; then
         apply_pid_tuning "$pid" "$oom_score" "$nice_level"
@@ -395,7 +403,7 @@ prune_stale_state() {
     for f in "$STATE_DIR"/*; do
         [ -e "$f" ] || break
         pid="${f##*/}"
-        [ -d "/proc/$pid" ] || rm -f "$f" 2>/dev/null
+        [ -d "$PROC_DIR/$pid" ] || rm -f "$f" 2>/dev/null
     done
 }
 
@@ -439,6 +447,10 @@ main_loop() {
         fi
     done
 }
+
+# Sourcing with CHROME_GUARD_LIB_ONLY set loads the functions above without
+# starting the guard, which is how the test suite exercises them.
+[ -n "${CHROME_GUARD_LIB_ONLY:-}" ] && return 0
 
 acquire_lock
 refresh_tick_ts

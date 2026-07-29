@@ -9,7 +9,7 @@
 # we control their wake-locks, kill priority, and sync interval so
 # notifications/sync keep working while RAM/battery stay in check.
 
-LOGFILE="/data/local/tmp/mido_optimize.log"
+LOGFILE="${MIDO_OPTIMIZE_LOG:-/data/local/tmp/mido_optimize.log}"
 echo "=== mido Optimize v3.0 Start: $(date) ===" > "$LOGFILE"
 
 log() {
@@ -24,6 +24,10 @@ check_node() {
         return 1
     fi
 }
+
+# Sourcing with MIDO_OPTIMIZE_LIB_ONLY set loads the helpers above without
+# applying any tuning, which is how the test suite exercises them.
+[ -n "${MIDO_OPTIMIZE_LIB_ONLY:-}" ] && return 0
 
 # ── Root check ──────────────────────────────────────────────────────────────
 if [ "$(id -u)" != "0" ]; then
