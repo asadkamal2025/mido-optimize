@@ -132,7 +132,15 @@ PRUNE_EVERY=5   # only scan STATE_DIR for stale entries every N ticks
 umask 022
 PATH=/system/bin:/system/xbin:/sbin:/vendor/bin:$PATH
 
-mkdir -p "$LOG_DIR" "$STATE_DIR" 2>/dev/null
+if ! mkdir_err="$(mkdir -p "$LOG_DIR" "$STATE_DIR" 2>&1)"; then
+    echo "chrome_colab_guard: cannot create $LOG_DIR / $STATE_DIR: ${mkdir_err:-unknown error}" >&2
+    exit 1
+fi
+
+if ! : >> "$LOG_FILE" 2>/dev/null; then
+    echo "chrome_colab_guard: log file $LOG_FILE is not writable" >&2
+    exit 1
+fi
 
 # Cached per-tick timestamp - refreshed once per loop iteration by
 # refresh_tick_ts(). log() reuses it instead of forking `date` every line.
@@ -143,7 +151,8 @@ refresh_tick_ts() {
 }
 
 log() {
-    echo "$LOOP_TS  $*" >> "$LOG_FILE"
+    echo "$LOOP_TS  $*" >> "$LOG_FILE" 2>/dev/null \
+        || echo "$LOOP_TS  $*" >&2
 }
 
 prop_get() {
@@ -156,18 +165,31 @@ prop_enabled() {
     [ "$current" = "1" ]
 }
 
+# Only the instance that actually owns the lock may remove it, otherwise a
+# second instance exiting because the lock was already held would delete the
+# running instance's lock on its way out.
+LOCK_OWNED=0
+
 cleanup() {
-    rm -rf "$LOCK_DIR" 2>/dev/null
+    [ "$LOCK_OWNED" = "1" ] && rm -rf "$LOCK_DIR" 2>/dev/null
     refresh_tick_ts
     log "[STOP] exiting"
 }
 trap cleanup INT TERM EXIT
 
-acquire_lock() {
-    if mkdir "$LOCK_DIR" 2>/dev/null; then
-        echo $$ > "$LOCK_DIR/pid"
-        return 0
+take_lock_dir() {
+    mkdir "$LOCK_DIR" 2>/dev/null || return 1
+    LOCK_OWNED=1
+    if ! echo $$ > "$LOCK_DIR/pid" 2>/dev/null; then
+        log "[FAIL] could not record PID in $LOCK_DIR/pid"
+        return 1
     fi
+    return 0
+}
+
+acquire_lock() {
+    take_lock_dir && return 0
+    [ "$LOCK_OWNED" = "1" ] && exit 1
 
     old_pid="$(cat "$LOCK_DIR/pid" 2>/dev/null)"
     if [ -n "$old_pid" ] && [ -d "/proc/$old_pid" ]; then
@@ -176,10 +198,7 @@ acquire_lock() {
     fi
 
     rm -rf "$LOCK_DIR" 2>/dev/null
-    if mkdir "$LOCK_DIR" 2>/dev/null; then
-        echo $$ > "$LOCK_DIR/pid"
-        return 0
-    fi
+    take_lock_dir && return 0
 
     log "[FAIL] could not acquire lock"
     exit 1
@@ -233,12 +252,16 @@ mount_tmpfs_if_needed() {
         return 0
     fi
 
-    mkdir -p "$TMPFS_TARGET" 2>/dev/null
-    if mount -t tmpfs -o "size=$TMPFS_SIZE,mode=1777,nosuid,nodev" tmpfs "$TMPFS_TARGET" 2>/dev/null; then
-        log "[OK] mounted tmpfs on $TMPFS_TARGET size=$TMPFS_SIZE (avail=${avail_kb}KB)"
-    else
-        log "[FAIL] tmpfs mount failed on $TMPFS_TARGET"
+    if ! mkdir_err="$(mkdir -p "$TMPFS_TARGET" 2>&1)"; then
+        log "[FAIL] cannot create $TMPFS_TARGET: ${mkdir_err:-unknown error}"
+        return 1
     fi
+    if mount_err="$(mount -t tmpfs -o "size=$TMPFS_SIZE,mode=1777,nosuid,nodev" tmpfs "$TMPFS_TARGET" 2>&1)"; then
+        log "[OK] mounted tmpfs on $TMPFS_TARGET size=$TMPFS_SIZE (avail=${avail_kb}KB)"
+        return 0
+    fi
+    log "[FAIL] tmpfs mount failed on $TMPFS_TARGET: ${mount_err:-unknown error}"
+    return 1
 }
 
 # v7: tmpfs is no longer "mount once, trust forever". A 4GB device running
@@ -250,14 +273,19 @@ recheck_tmpfs_safety() {
 
     avail_kb="$(get_mem_available_kb)"
     case "$avail_kb" in
-        ''|*[!0-9]*) return 0 ;;
+        ''|*[!0-9]*)
+            log "[WARN] MemAvailable unreadable; cannot re-validate tmpfs safety"
+            return 0
+            ;;
     esac
 
     if [ "$avail_kb" -lt "$TMPFS_CRITICAL_MEM_KB" ]; then
         log "[WARN] MemAvailable=${avail_kb}KB critical; unmounting tmpfs on $TMPFS_TARGET"
-        umount "$TMPFS_TARGET" 2>/dev/null \
-            && log "[OK] tmpfs unmounted from $TMPFS_TARGET" \
-            || log "[FAIL] tmpfs unmount failed (likely busy); will retry next check"
+        if umount_err="$(umount "$TMPFS_TARGET" 2>&1)"; then
+            log "[OK] tmpfs unmounted from $TMPFS_TARGET"
+        else
+            log "[FAIL] tmpfs unmount failed (${umount_err:-likely busy}); will retry next check"
+        fi
     fi
 }
 
@@ -295,7 +323,12 @@ collect_chrome_pids() {
         pid="${pid%/cmdline}"
         # Re-read just this one match to classify exactly (builtin `read`,
         # no extra process forked).
-        IFS= read -r cmd < "$f" 2>/dev/null
+        # The process can exit between the grep and this read; that is an
+        # expected race, anything else is worth recording.
+        if ! IFS= read -r cmd < "$f" 2>/dev/null; then
+            [ -d "/proc/$pid" ] && log "[WARN] pid=$pid cmdline unreadable"
+            continue
+        fi
         case "$cmd" in
             "$CHROME_PKG")
                 MAIN_PIDS="$MAIN_PIDS $pid"
@@ -341,26 +374,40 @@ apply_pid_tuning() {
 
     changed=0
 
-    current_oom="$(read_proc_value "/proc/$pid/oom_score_adj")"
+    failed=0
+
+    if ! current_oom="$(read_proc_value "/proc/$pid/oom_score_adj")"; then
+        log "[WARN] pid=$pid oom_score_adj unreadable"
+        current_oom=""
+        failed=1
+    fi
     if [ "$current_oom" != "$oom_score" ]; then
         if echo "$oom_score" > "/proc/$pid/oom_score_adj" 2>/dev/null; then
             changed=1
             log "[OK] pid=$pid oom_score_adj -> $oom_score"
         else
             log "[WARN] pid=$pid oom_score_adj write failed"
+            failed=1
         fi
     fi
 
-    current_nice="$(read_proc_nice "$pid")"
+    if ! current_nice="$(read_proc_nice "$pid")"; then
+        log "[WARN] pid=$pid nice unreadable"
+        current_nice=""
+        failed=1
+    fi
     if [ "$current_nice" != "$nice_level" ]; then
         if renice "$nice_level" -p "$pid" >/dev/null 2>&1; then
             changed=1
             log "[OK] pid=$pid nice -> $nice_level"
         else
             log "[WARN] pid=$pid renice failed"
+            failed=1
         fi
     fi
 
+    # 1 = something went wrong, 2 = nothing needed changing, 0 = applied.
+    [ "$failed" = "1" ] && return 1
     [ "$changed" = "1" ] || return 2
     return 0
 }
@@ -379,15 +426,33 @@ tune_if_needed() {
     tag="${tier}:${oom_score}:${nice_level}"
 
     if [ ! -f "$state_file" ] || [ "$(cat "$state_file" 2>/dev/null)" != "$tag" ]; then
+        # Only record the tag when tuning actually succeeded (or was already
+        # in place); caching it after a failure would suppress every retry.
         apply_pid_tuning "$pid" "$oom_score" "$nice_level"
-        echo "$tag" > "$state_file"
-        return 0
+        case "$?" in
+            0|2)
+                echo "$tag" > "$state_file" 2>/dev/null \
+                    || log "[WARN] could not write state file $state_file"
+                return 0
+                ;;
+            *)
+                rm -f "$state_file" 2>/dev/null
+                return 1
+                ;;
+        esac
     fi
 
-    current_oom="$(read_proc_value "/proc/$pid/oom_score_adj")"
-    current_nice="$(read_proc_nice "$pid")"
+    current_oom="$(read_proc_value "/proc/$pid/oom_score_adj")" || current_oom=""
+    current_nice="$(read_proc_nice "$pid")" || current_nice=""
     if [ "$current_oom" != "$oom_score" ] || [ "$current_nice" != "$nice_level" ]; then
         apply_pid_tuning "$pid" "$oom_score" "$nice_level"
+        case "$?" in
+            0|2) return 0 ;;
+            *)
+                rm -f "$state_file" 2>/dev/null
+                return 1
+                ;;
+        esac
     fi
 }
 
@@ -395,7 +460,9 @@ prune_stale_state() {
     for f in "$STATE_DIR"/*; do
         [ -e "$f" ] || break
         pid="${f##*/}"
-        [ -d "/proc/$pid" ] || rm -f "$f" 2>/dev/null
+        if [ ! -d "/proc/$pid" ]; then
+            rm -f "$f" 2>/dev/null || log "[WARN] could not prune stale state file $f"
+        fi
     done
 }
 
