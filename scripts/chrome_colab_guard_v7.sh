@@ -133,6 +133,7 @@ umask 022
 PATH=/system/bin:/system/xbin:/sbin:/vendor/bin:$PATH
 
 mkdir -p "$LOG_DIR" "$STATE_DIR" 2>/dev/null
+chmod 0700 "$LOG_DIR" "$STATE_DIR" 2>/dev/null
 
 # Cached per-tick timestamp - refreshed once per loop iteration by
 # refresh_tick_ts(). log() reuses it instead of forking `date` every line.
@@ -234,7 +235,7 @@ mount_tmpfs_if_needed() {
     fi
 
     mkdir -p "$TMPFS_TARGET" 2>/dev/null
-    if mount -t tmpfs -o "size=$TMPFS_SIZE,mode=1777,nosuid,nodev" tmpfs "$TMPFS_TARGET" 2>/dev/null; then
+    if mount -t tmpfs -o "size=$TMPFS_SIZE,mode=1777,nosuid,nodev,noexec" tmpfs "$TMPFS_TARGET" 2>/dev/null; then
         log "[OK] mounted tmpfs on $TMPFS_TARGET size=$TMPFS_SIZE (avail=${avail_kb}KB)"
     else
         log "[FAIL] tmpfs mount failed on $TMPFS_TARGET"
