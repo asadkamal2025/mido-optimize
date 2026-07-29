@@ -48,6 +48,16 @@ git checkout -b feature/your-feature-name
 - Test thoroughly on device
 - Write clear commit messages
 
+### 3b. Run the Unit Tests
+The shell logic is covered by a [bats](https://github.com/bats-core/bats-core) suite
+in `tests/`, which runs against fixture directories instead of the real `/proc`,
+so it works on any Linux host (no device or root needed):
+
+```bash
+sudo apt-get install -y bats
+bats tests
+```
+
 ### 4. Push to Your Fork
 ```bash
 git push origin feature/your-feature-name

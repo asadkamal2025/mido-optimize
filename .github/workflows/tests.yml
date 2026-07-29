@@ -1,0 +1,18 @@
+name: tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  bats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bats and shellcheck
+        run: sudo apt-get update && sudo apt-get install -y bats shellcheck
+      - name: Run unit tests
+        run: bats tests
+      - name: Shellcheck
+        run: shellcheck -s sh -S warning mido_optimize.sh post-fs-data.sh scripts/*.sh || true
