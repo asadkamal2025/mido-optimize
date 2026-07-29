@@ -64,6 +64,22 @@ write_node() {
     return 1
 }
 
+# log_android_version [min_api] [prefix]
+# Logs the detected Android release/API level and warns when it is below the
+# supported baseline. Never exits, so unsupported ROMs still run.
+log_android_version() {
+    min_api="${1:-30}"
+    prefix="$2"
+    [ -n "$prefix" ] && prefix="$prefix "
+    android_sdk="$(getprop ro.build.version.sdk 2>/dev/null)"
+    android_release="$(getprop ro.build.version.release 2>/dev/null)"
+
+    log "${prefix}Detected Android $android_release (API $android_sdk)"
+    if [ -n "$android_sdk" ] && [ "$android_sdk" -lt "$min_api" ] 2>/dev/null; then
+        log "${prefix}WARNING: Android $android_release (API $android_sdk) is below supported baseline (API $min_api)."
+    fi
+}
+
 # set_prop <name> <value> - setprop never aborts the script.
 set_prop() {
     setprop "$1" "$2" 2>/dev/null || true

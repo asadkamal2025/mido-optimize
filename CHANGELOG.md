@@ -5,20 +5,36 @@ All notable changes to mido-optimize will be documented in this file.
 ## [Unreleased] - shared shell utilities
 
 ### Changed
-- Added `scripts/lib/common.sh`, sourced by both shell scripts: logging
+- Added `scripts/lib/common.sh`, sourced by all three shell scripts: logging
   (`log`/`refresh_log_ts`), `require_root`, `check_node`, `write_node`,
-  `set_prop`, `read_proc_value`, `is_positive_int`, `get_mem_available_kb`,
-  `is_tmpfs_mounted` and `mount_tmpfs`.
+  `log_android_version`, `set_prop`, `read_proc_value`, `is_positive_int`,
+  `get_mem_available_kb`, `is_tmpfs_mounted` and `mount_tmpfs`.
 - `mido_optimize.sh` (root) is now a thin wrapper that execs
   `scripts/mido_optimize.sh`; the two files were previously byte-identical
   copies that had to be hand-synced on every change.
 - `scripts/mido_optimize.sh`: the repeated `check_node && echo > node && log`
   triples and `setprop ... || true` lines now call `write_node`/`set_prop`;
   the `/cache` tmpfs block uses `mount_tmpfs`.
+- The v3.1 Android version detection block, previously copied into both
+  `mido_optimize.sh` copies and `post-fs-data.sh`, is now the single
+  `log_android_version [min_api] [prefix]` helper.
 - `scripts/chrome_colab_guard_v7.sh`: uses the shared logging, `/proc`
   reading, numeric validation and tmpfs helpers. Behaviour, log format and
   the v7 one-fork-per-tick logging property are unchanged. It must now be
   installed together with `lib/common.sh` (see MAGISK_INSTALL.md).
+
+## [3.1] - 2026-07-29
+
+### Added
+- Explicit Android version detection / Android 11 (API 30) compatibility guard
+  in both `mido_optimize.sh` and `scripts/mido_optimize.sh`. The scripts now
+  read `ro.build.version.release` and `ro.build.version.sdk` via `getprop`,
+  log the detected version (`Detected Android <release> (API <sdk>)`), and log
+  a clear WARNING when running below the supported baseline (Android 11 / API
+  30) — without hard-exiting, so unsupported ROMs still run gracefully.
+- Lightweight SDK detection in `post-fs-data.sh` that logs the detected Android
+  release/API level to the Magisk boot log before handing off to the main
+  optimization script.
 
 ## [scripts/chrome_colab_guard_v7.sh] - 2026-07-07
 
@@ -90,6 +106,7 @@ All notable changes to mido-optimize will be documented in this file.
 ## [Planned]
 
 ### v1.3
+- [x] Explicit Android version detection + Android 11 (API 30) baseline guard
 - [ ] Android 12+ support testing
 - [ ] Additional ROM compatibility (HavocOS, AOSP variants)
 - [ ] User configuration file (.config)
