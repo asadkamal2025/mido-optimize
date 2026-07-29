@@ -8,6 +8,11 @@
 # GMS/GSF are NOT disabled (unlike v1.x DeGoogle approach) - instead
 # we control their wake-locks, kill priority, and sync interval so
 # notifications/sync keep working while RAM/battery stay in check.
+#
+# v3.1: Added explicit Android version detection / compatibility guard.
+# The script now logs the detected Android release/API level and warns
+# (without hard-exiting) when running below the supported Android 11 /
+# API 30 baseline, before any tuning is applied.
 
 LOGFILE="/data/local/tmp/mido_optimize.log"
 echo "=== mido Optimize v3.0 Start: $(date) ===" > "$LOGFILE"
@@ -31,6 +36,23 @@ if [ "$(id -u)" != "0" ]; then
     exit 1
 fi
 log "Root check passed OK"
+
+# ── Android version detection / compatibility guard ───────────────────────
+# Confirm we are on a supported Android version before applying tuning.
+# Baseline is Android 11 (API 30 / LineageOS 18.1). Older, unsupported
+# versions log a clear warning but do NOT hard-exit, matching the existing
+# check_node pattern that skips gracefully rather than aborting.
+MIN_SUPPORTED_SDK=30
+ANDROID_SDK="$(getprop ro.build.version.sdk 2>/dev/null)"
+ANDROID_RELEASE="$(getprop ro.build.version.release 2>/dev/null)"
+log "Detected Android ${ANDROID_RELEASE:-unknown} (API ${ANDROID_SDK:-unknown})"
+if [ -z "$ANDROID_SDK" ]; then
+    log "WARNING: Could not detect Android SDK level (getprop unavailable). Proceeding anyway."
+elif [ "$ANDROID_SDK" -lt "$MIN_SUPPORTED_SDK" ]; then
+    log "WARNING: Android ${ANDROID_RELEASE:-unknown} (API ${ANDROID_SDK}) is below the supported baseline (Android 11 / API 30). Proceeding may be unsafe."
+else
+    log "Android version check passed OK (API ${ANDROID_SDK} >= ${MIN_SUPPORTED_SDK})"
+fi
 
 # ── GApps: Targeted non-essential sub-component disable only ───────────────
 # Core GMS/GSF/Play Store/Play Services notifications are LEFT ALONE.
