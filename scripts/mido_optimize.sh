@@ -8,6 +8,10 @@
 # GMS/GSF are NOT disabled (unlike v1.x DeGoogle approach) - instead
 # we control their wake-locks, kill priority, and sync interval so
 # notifications/sync keep working while RAM/battery stay in check.
+#
+# Now includes explicit Android version detection: reads the OS release
+# and SDK/API level and warns (without exiting) when running below the
+# supported baseline of Android 11 (API 30).
 
 LOGFILE="/data/local/tmp/mido_optimize.log"
 
@@ -72,6 +76,15 @@ if [ "$(id -u)" != "0" ]; then
     exit 1
 fi
 log "Root check passed OK"
+
+# ── Android version detection (supported baseline: Android 11 / API 30) ────
+MIN_API=30
+ANDROID_SDK="$(getprop ro.build.version.sdk 2>/dev/null)"
+ANDROID_RELEASE="$(getprop ro.build.version.release 2>/dev/null)"
+log "Detected Android $ANDROID_RELEASE (API $ANDROID_SDK)"
+if [ -n "$ANDROID_SDK" ] && [ "$ANDROID_SDK" -lt "$MIN_API" ] 2>/dev/null; then
+    log "WARNING: Android $ANDROID_RELEASE (API $ANDROID_SDK) is below supported baseline (Android 11 / API 30)."
+fi
 
 # ── GApps: Targeted non-essential sub-component disable only ───────────────
 # Core GMS/GSF/Play Store/Play Services notifications are LEFT ALONE.

@@ -12,6 +12,15 @@ if ! : >> "$LOGFILE" 2>/dev/null; then
     LOGFILE="/dev/null"
 fi
 
+# Lightweight Android version detection (baseline: Android 11 / API 30)
+ANDROID_SDK="$(getprop ro.build.version.sdk 2>/dev/null)"
+ANDROID_RELEASE="$(getprop ro.build.version.release 2>/dev/null)"
+if [ -z "$ANDROID_SDK" ]; then
+    echo "[post-fs-data] WARN: could not read ro.build.version.sdk" >> "$LOGFILE"
+else
+    echo "[post-fs-data] Detected Android $ANDROID_RELEASE (API $ANDROID_SDK)" >> "$LOGFILE"
+fi
+
 if [ ! -r "$SCRIPT" ]; then
     echo "mido-optimize: optimization script missing at $SCRIPT" | tee -a "$LOGFILE" >&2
     exit 1

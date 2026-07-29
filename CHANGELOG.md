@@ -2,6 +2,19 @@
 
 All notable changes to mido-optimize will be documented in this file.
 
+## [3.1] - 2026-07-29
+
+### Added
+- Explicit Android version detection / Android 11 (API 30) compatibility guard
+  in both `mido_optimize.sh` and `scripts/mido_optimize.sh`. The scripts now
+  read `ro.build.version.release` and `ro.build.version.sdk` via `getprop`,
+  log the detected version (`Detected Android <release> (API <sdk>)`), and log
+  a clear WARNING when running below the supported baseline (Android 11 / API
+  30) — without hard-exiting, so unsupported ROMs still run gracefully.
+- Lightweight SDK detection in `post-fs-data.sh` that logs the detected Android
+  release/API level to the Magisk boot log before handing off to the main
+  optimization script.
+
 ## [scripts/chrome_colab_guard_v7.sh] - 2026-07-07
 
 ### Added
@@ -72,6 +85,7 @@ All notable changes to mido-optimize will be documented in this file.
 ## [Planned]
 
 ### v1.3
+- [x] Explicit Android version detection + Android 11 (API 30) baseline guard
 - [ ] Android 12+ support testing
 - [ ] Additional ROM compatibility (HavocOS, AOSP variants)
 - [ ] User configuration file (.config)
