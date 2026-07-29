@@ -17,7 +17,7 @@ Description:
 - Android Version: 11 (LineageOS)
 - Magisk Version: v24.0
 - Steps to reproduce: 1. ... 2. ...
-- Logs: /data/local/tmp/mido_optimize_magisk.log
+- Logs: /data/adb/mido-optimize/mido_optimize_magisk.log
 ```
 
 ### ✨ Suggest Features

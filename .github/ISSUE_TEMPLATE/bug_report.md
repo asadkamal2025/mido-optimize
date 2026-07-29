@@ -23,7 +23,7 @@ What actually happened instead?
 ## 📸 Logs & Evidence
 ```
 Paste relevant logs here:
-/data/local/tmp/mido_optimize.log
+/data/adb/mido-optimize/mido_optimize.log
 ```
 
 ## 📱 Device Information

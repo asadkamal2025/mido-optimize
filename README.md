@@ -85,9 +85,14 @@
 
 ```bash
 su
-cd /data/local/tmp
-curl -L https://raw.githubusercontent.com/asadkamal2025/mido-optimize/main/scripts/mido_optimize.sh -o mido_optimize.sh
-chmod +x mido_optimize.sh
+# Use a root-only directory. /data/local/tmp is world-writable (1777), so a
+# script staged there can be swapped out by any app before you run it as root.
+mkdir -p /data/adb/mido-optimize && chmod 0700 /data/adb/mido-optimize
+cd /data/adb/mido-optimize
+curl -fsSL https://raw.githubusercontent.com/asadkamal2025/mido-optimize/main/scripts/mido_optimize.sh -o mido_optimize.sh
+# Review the script before running it as root
+less mido_optimize.sh
+chmod 0700 mido_optimize.sh
 ./mido_optimize.sh
 ```
 
@@ -96,12 +101,16 @@ chmod +x mido_optimize.sh
 ### Method 3: Download & Manual
 
 1. Download `scripts/mido_optimize.sh`
-2. Transfer to device
+2. Transfer to device, then move it into a root-only directory (never run it as
+   root from a world-writable path such as `/data/local/tmp` or `/sdcard`)
 3. Run:
    ```bash
    su
-   chmod +x /path/to/mido_optimize.sh
-   /path/to/mido_optimize.sh
+   mkdir -p /data/adb/mido-optimize && chmod 0700 /data/adb/mido-optimize
+   mv /path/to/mido_optimize.sh /data/adb/mido-optimize/
+   chown root:root /data/adb/mido-optimize/mido_optimize.sh
+   chmod 0700 /data/adb/mido-optimize/mido_optimize.sh
+   /data/adb/mido-optimize/mido_optimize.sh
    ```
 
 ---
@@ -111,13 +120,13 @@ chmod +x mido_optimize.sh
 ### Run Script (Manual)
 ```bash
 su
-/data/local/tmp/mido_optimize.sh
+/data/adb/mido-optimize/mido_optimize.sh
 ```
 
 ### View Logs
 ```bash
-cat /data/local/tmp/mido_optimize.log
-cat /data/local/tmp/mido_optimize_magisk.log
+cat /data/adb/mido-optimize/mido_optimize.log
+cat /data/adb/mido-optimize/mido_optimize_magisk.log
 ```
 
 ### Check Settings
@@ -152,11 +161,14 @@ cat /sys/class/kgsl/kgsl-3d0/devfreq/governor
 ## 🛡️ Safety
 
 ✅ **Safe to use:**
-- Runs as user, not system level
 - Only modifies runtime properties
 - Extensive error checking
 - No risk of bootloop
 - Can run multiple times
+
+⚠️ **Note:** the script requires root (`su`) and applies system-wide tuning.
+Keep it and its logs in a root-only directory (`/data/adb/mido-optimize`) and
+review any copy you downloaded before executing it as root.
 
 **Rollback:** Simply restart your device
 

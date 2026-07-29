@@ -65,7 +65,7 @@ su
 ls -la /data/adb/modules/mido_optimize/
 
 # View optimization log
-cat /data/local/tmp/mido_optimize_magisk.log
+cat /data/adb/mido-optimize/mido_optimize_magisk.log
 
 # Check if properties are applied
 getprop ro.lmk.use_psi
@@ -99,7 +99,7 @@ Restart device
 
 - **Issues:** Open on GitHub
 - **Questions:** Check documentation
-- **Logs:** Always attach `/data/local/tmp/mido_optimize_magisk.log`
+- **Logs:** Always attach `/data/adb/mido-optimize/mido_optimize_magisk.log`
 
 ---
 

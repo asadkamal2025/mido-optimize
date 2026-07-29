@@ -9,8 +9,16 @@
 # we control their wake-locks, kill priority, and sync interval so
 # notifications/sync keep working while RAM/battery stay in check.
 
-LOGFILE="/data/local/tmp/mido_optimize.log"
+# Logs live in a root-only directory. /data/local/tmp is world-writable
+# (mode 1777), so a root-owned log there can be pre-created as a symlink by
+# any local app and used to truncate/overwrite arbitrary files as root.
+LOGDIR="/data/adb/mido-optimize"
+LOGFILE="$LOGDIR/mido_optimize.log"
+mkdir -p "$LOGDIR" 2>/dev/null
+chmod 0700 "$LOGDIR" 2>/dev/null
+[ -L "$LOGFILE" ] && rm -f "$LOGFILE"
 echo "=== mido Optimize v3.0 Start: $(date) ===" > "$LOGFILE"
+chmod 0600 "$LOGFILE" 2>/dev/null
 
 log() {
     echo "[$(date '+%H:%M:%S')] $1" | tee -a "$LOGFILE"
@@ -135,7 +143,7 @@ log "GPU conditional tuning done OK"
 # ── tmpfs /cache for GApps DB writes (Play Store cache, Contacts DB) ───────
 log "tmpfs cache mount for fast GApps DB writes (648 MB/s verified)"
 if ! mountpoint -q /cache 2>/dev/null; then
-    mount -t tmpfs -o size=64m,mode=0770,uid=1000,gid=1000 tmpfs /cache 2>/dev/null \
+    mount -t tmpfs -o size=64m,mode=0770,uid=1000,gid=1000,nosuid,nodev,noexec tmpfs /cache 2>/dev/null \
         && log "tmpfs /cache mounted OK" \
         || log "tmpfs /cache mount failed or already handled"
 else
